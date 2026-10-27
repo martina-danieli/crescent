@@ -1,19 +1,96 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import {
+  ActivityIndicator,
+  Button,
+  StyleSheet,
+  Text,
+  TextInput,
+} from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import {
+  FunctionsFetchError,
+  FunctionsHttpError,
+  FunctionsRelayError,
+} from '@supabase/supabase-js';
+import { supabase } from './src/lib/supabase';
+
+// Turns any error into a readable message, including the HTTP status if there is one.
+async function describeError(error: unknown): Promise<string> {
+  if (error instanceof FunctionsHttpError) {
+    const response: Response = error.context;
+    const body = await response.text().catch(() => '');
+    return `HTTP ${response.status}: ${body || error.message}`;
+  }
+  if (error instanceof FunctionsRelayError) {
+    return `Relay error: ${error.message}`;
+  }
+  if (error instanceof FunctionsFetchError) {
+    return `Network error: ${error.message}`;
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    const status =
+      'status' in error && error.status ? `HTTP ${error.status}: ` : '';
+    return `${status}${String(error.message)}`;
+  }
+  return String(error);
+}
 
 function App() {
-  const [count, setCount] = useState(0);
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function send() {
+    setLoading(true);
+    setResult(null);
+    setError(null);
+    try {
+      // a. Sign in anonymously if there's no saved session yet.
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        const { error: signInError } = await supabase.auth.signInAnonymously();
+        if (signInError) {
+          throw signInError;
+        }
+      }
+
+      // b. Call the "echo" edge function.
+      const { data, error: invokeError } = await supabase.functions.invoke(
+        'echo',
+        { body: { text } },
+      );
+      if (invokeError) {
+        throw invokeError;
+      }
+
+      // c. Show the response.
+      setResult(JSON.stringify(data, null, 2));
+    } catch (e) {
+      setError(await describeError(e));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.container}>
-        <Text style={styles.title}>Crescent 🌙</Text>
-        <Text style={styles.subtitle}>Edit App.tsx and save to see changes.</Text>
-
-        <Pressable style={styles.button} onPress={() => setCount(count + 1)}>
-          <Text style={styles.buttonText}>Tapped {count} times</Text>
-        </Pressable>
+        <TextInput
+          style={styles.input}
+          multiline
+          value={text}
+          onChangeText={setText}
+          placeholder="Type something"
+        />
+        <Button title="Send" onPress={send} disabled={loading} />
+        {loading && <ActivityIndicator />}
+        {result && <Text selectable>{result}</Text>}
+        {error && (
+          <Text selectable style={styles.error}>
+            {error}
+          </Text>
+        )}
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -22,28 +99,20 @@ function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 16,
+    gap: 12,
     backgroundColor: '#fff',
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  subtitle: {
-    marginTop: 8,
-    color: '#666',
-  },
-  button: {
-    marginTop: 24,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+  input: {
+    minHeight: 120,
+    borderWidth: 1,
+    borderColor: '#ccc',
     borderRadius: 8,
-    backgroundColor: '#7b5cff',
+    padding: 8,
+    textAlignVertical: 'top',
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
+  error: {
+    color: 'red',
   },
 });
 

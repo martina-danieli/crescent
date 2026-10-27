@@ -51,3 +51,7 @@ You can also skip Xcode and run `npm run ios`.
 - In the simulator, press **⌘D** for the dev menu, or **R** in the `npm start` terminal to reload.
 - Something weird? Stop Metro and run `npm start -- --reset-cache`.
 - Native build errors after adding a library: `cd ios && pod install`, then clean the build in Xcode (⇧⌘K).
+
+## Supabase echo test
+
+See [docs/echo-test.md](docs/echo-test.md) for deploying the `echo` function and testing it from the app.
